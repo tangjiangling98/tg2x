@@ -1,0 +1,10 @@
+{
+  "name": "tg2x-domestic",
+  "version": "1.0.0",
+  "private": true,
+  "description": "XjianglinX 国内平台分发：把 @YMISH3333 中文原文排版后同步到公众号草稿箱与小红书",
+  "type": "commonjs",
+  "dependencies": {
+    "xhshow-js": "^1.0.0"
+  }
+}
