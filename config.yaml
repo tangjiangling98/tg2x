@@ -1,0 +1,195 @@
+# ===== Telegram 频道 -> 英文翻译 -> Buffer -> X 自动搬运 =====
+
+# 你关注的频道（不带 @）
+channel: "YMISH3333"
+
+# 多频道列表：所有频道的内容都发到同一个 X 账号（publish.buffer.channel_id）
+#   lang   : zh = 中文原文，翻译成英文再发；en = 英文原文，直接发（或洗稿后发）
+#   rewrite: true = 用 LLM 洗稿（换一种表达，保持事实不变）；false = 不洗稿
+channels:
+  - name: "YMISH3333"
+    lang: "zh"
+    rewrite: false
+  - name: "disaster_news"
+    lang: "en"
+    rewrite: false
+  - name: "xinwen4588"
+    lang: "zh"
+    rewrite: false
+  - name: "BREAKING_NEWS_TG"
+    lang: "en"
+    rewrite: false
+
+fetch:
+  # web      : 抓 https://t.me/s/<channel> 网页版，零凭证，30s 轮询（你不是频道主，只能用这个或 telethon）
+  # telethon : MTProto 用户会话，频道转私有 / 要秒级时用，需 api_id/api_hash + 手机号登录
+  # bot      : 仅频道的管理员可用（把 bot 设为频道管理员），你不在这种情况
+  backend: "web"
+  interval_seconds: 30
+  # 每轮最多发多少篇（合并所有频道新帖后，按影响排序取前 N 篇）
+  max_per_cycle: 2
+  request_timeout: 20
+
+publish:
+  # 首次启动时，频道里已有的历史帖是否也发出去
+  # false = 只发接入之后的新帖（推荐）
+  publish_existing_on_boot: false
+  dry_run: false
+  # buffer | command | http | dry_run
+  target: "buffer"
+  # XjianglinX 已开通蓝 V（X Premium），单条上限 25000 字，不再截断
+  max_len: 25000
+  # 发文是否带上 Telegram 原文链接（false = 只发正文，不带链接）
+  include_source_link: false
+
+  buffer:
+    token_env: "BUFFER_TOKEN"
+    # 留空 = 自动在 Buffer 里找连着的 X 频道并缓存到 data/buffer_channel.json
+    # 有多个 X 频道时，这里必须填（先跑 python run.py buffer-setup 看 id）
+    organization_id: ""
+    channel_id: "6ae73010e29c69a17126cbf5"
+    # shareNow（立即发）| addToQueue（进 Buffer 队列的下一个空档）| customScheduled
+    mode: "shareNow"
+    # 同批次的第 2 条起，自动排到 60 分钟后再发（间隔至少 60 分钟）
+    spacing_min_minutes: 60
+    spacing_max_minutes: 60
+    # telegram_url : 直接把 Telegram CDN 图片链接传给 Buffer（零成本，默认）
+    # none         : 只发文字
+    media: "telegram_url"
+    max_assets: 4
+    timeout: 30
+
+  # target=command 时才用：调用任意脚本，JSON 从 stdin 传入，退出码 0 为成功
+  command:
+    command: 'python "D:/2026-11-12-16-57-36/tg2x/examples/x_poster_example.py"'
+
+  # target=http 时才用
+  http:
+    url: ""
+    token_env: "X_POSTER_TOKEN"
+
+translate:
+  # google_free : 免费、无需 key（默认）
+  # llm         : 走 OpenAI 兼容接口，译文更自然
+  provider: "google_free"
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+  api_key_env: "OPENAI_API_KEY"
+  timeout: 30
+  # 两次翻译请求的最小间隔（秒）。免费接口会限流，别设为 0
+  min_interval: 1.5
+  # 主引擎被限流时的备用引擎：留空 = 不启用；"mymemory" = 用 MyMemory 免费接口应急
+  fallback: ""
+  prefix: ""
+  # 话题标签是否抽出到末尾。false = 留在原位由翻译引擎处理（推荐）
+  keep_hashtags: false
+  strip_urls_from_translate: true
+
+# DeepSeek 写作引擎：洗稿 + 互动形式 + 写作要求总册核心原则
+# tg2x（XjianglinX）：关闭，扫描到内容后直接翻译发送（不洗稿）
+writer:
+  enabled: false
+  # DeepSeek（OpenAI 兼容接口）
+  base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-chat"
+  api_key_env: "DEEPSEEK_API_KEY"
+  temperature: 0.7
+  timeout: 60
+
+# 原文清洗：频道尾巴的推广/投稿联系方式不要带到 X
+cleanup:
+  # 内容合规过滤（中国政治敏感 + 关于中国只发 AI 类）。tg2x 关闭（翻译直发，不过滤）
+  content_filter: false
+  remove_patterns:
+    - '关注[^\n]*?频道[^\n]*'
+    - '投稿\s*[:：]\s*@\w+'
+    - '商务合作\s*[:：][^\n]*'
+    - '^\s*[➡️👉]\s*[^\n]*$'
+    - '^\s*@\w+\s*$'
+  # 命中任一词就跳过不发（X 对赌博/灰产/涉黄内容有限制，建议按需打开）
+  block_keywords: []
+
+  # 广告/引流贴识别：命中任意「强广告词」整条跳过；「弱广告词」累计 2 个也跳过
+  # 另外自动识别：t.me 邀请链接、纯链接堆、⚡️⚡️⚡️ 刷屏层
+  ad_keywords:
+    - "博彩"
+    - "赌博"
+    - "娱乐城"
+    - "棋牌"
+    - "彩票"
+    - "返水"
+    - "返佣"
+    - "首存"
+    - "上押"
+    - "下注"
+    - "投注"
+    - "包网"
+    - "刷流水"
+    - "招代理"
+    - "代理招商"
+    - "稳赚"
+    - "带单"
+    - "开奖"
+    - "买粉"
+    - "刷粉"
+    - "精选频道"
+    - "频道推荐"
+    - "收录频道"
+    - "推荐频道"
+    - "频道导航"
+    - "频道目录"
+    - "互推"
+    - "广告位"
+    - "推广位"
+    # 英文频道广告（赌场/博彩推广等）
+    - "free spins"
+    - "deposit bonus"
+    - "no deposit"
+    - "welcome bonus"
+    - "betting site"
+    - "sportsbook"
+    - "online casino"
+    - "crypto casino"
+    - "casino bonus"
+  ad_weak_keywords:
+    - "加群"
+    - "进群"
+    - "私聊"
+    - "邀请"
+    - "注册"
+    - "领取"
+    - "入口"
+    - "导航"
+    - "点击"
+    - "限时"
+    - "福利"
+    - "返利"
+    - "代理"
+    - "官方频道"
+  # 弱广告词累计命中多少个才判定为广告
+  ad_weak_threshold: 2
+
+  # 关键词去重（纯规则、不用 AI）：与最近已发内容关键词重叠度过高则跳过，避免重复发
+  dedup_enabled: true
+  dedup_window: 10       # 对比最近多少条已发内容
+  dedup_threshold: 0.6   # Jaccard 相似度阈值（0-1，越大越严格，0.6=需60%关键词重叠）
+
+storage:
+  data_dir: "data"
+  # 原文 + 图片归档到本地，保证"复制下来"这一步不丢东西
+  archive_media: true
+  # 每频道只保留最近多少条去重记录，更早的自动删除（防止库无限增长）。0 = 不清理
+  prune_keep: 10
+
+# 跑完通过你的 bot 给自己发一条回执（不是用来读频道的，bot 进不了别人的频道）
+notify:
+  enabled: true
+  bot_token_env: "TG_BOT_TOKEN"
+  chat_id_env: "TG_CHAT_ID"
+  on_success: true
+  on_failure: true
+  # 回执里是否带上发出去的英文正文（方便快速过一眼）
+  include_text: true
+  # 没有新帖就不发消息，避免定时任务每 10 分钟骚扰一次
+  quiet_when_noop: true
+  timeout: 20
